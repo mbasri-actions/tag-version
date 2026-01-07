@@ -30,6 +30,7 @@ runs:
       id: gitversion
       uses: gittools/actions/gitversion/execute@v4
 
-    - run: |
-        echo "FullSemVer=${{ steps.gitversion.outputs.fullSemVer }}" >> $GITHUB_OUTPUT
-        echo "SHA=${{ steps.gitversion.outputs.sha }}" >> $GITHUB_OUTPUT
+    - name: Set outputs
+      run: |
+        echo "gitversion-fullsemver=${{ steps.gitversion.outputs.fullSemVer }}" >> $GITHUB_OUTPUT
+        echo "gitversion-sha=${{ steps.gitversion.outputs.sha }}" >> $GITHUB_OUTPUT
