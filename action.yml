@@ -116,8 +116,8 @@ runs:
     - name: Push Major Version Tag
       if: ${{ inputs.pushMajorVersionTag == 'true' }}
       shell: bash
-      #env:
-      #  GITHUB_TOKEN: ${{ inputs.githubToken }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.githubToken }}
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -127,8 +127,8 @@ runs:
     - name: Push Major.Minor Version Tag
       if: ${{ inputs.pushMajorMinorVersionTag == 'true' }}
       shell: bash
-      #env:
-      #  GITHUB_TOKEN: ${{ inputs.githubToken }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.githubToken }}
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -138,8 +138,8 @@ runs:
     - name: Push Major.Minor.Patch Version Tag
       if: ${{ inputs.pushMajorMinorPatchVersionTag == 'true' }}
       shell: bash
-      #env:
-      #  GITHUB_TOKEN: ${{ inputs.githubToken }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.githubToken }}
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
