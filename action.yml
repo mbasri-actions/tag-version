@@ -119,14 +119,20 @@ runs:
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+
         git tag -d "v${{ steps.gitversion.outputs.major }}" || true
         git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
+
+        git checkout -b tmp-release-major
 
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
           sed -i "s/\("technical:module:version"\).*/\1: \"${{ steps.gitversion.outputs.major }}\"/" 01-locals.tf
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" README.md
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" .terraform-docs.yml
         fi
+
+        git add .
+        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}" || echo "No changes to commit"
 
         git tag "v${{ steps.gitversion.outputs.major }}"
         git push origin "v${{ steps.gitversion.outputs.major }}"
