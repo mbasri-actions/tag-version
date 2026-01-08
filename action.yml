@@ -107,7 +107,7 @@ runs:
 
         # Template for each version
         body = """
-        ## [{{ version }}](${{ github.repository }}/-/compare/{{ previous.version }}...{{ version }}) ({{ timestamp | date(format="%Y-%m-%d") }})
+        ## [{{ version }}](${{ github.repository }}/-/compare/{{ previous.version }}...CHANGEME) ({{ timestamp | date(format="%Y-%m-%d") }})
         {% for commit in commits %}- {{ commit.message | split(pat="\n") | first | upper_first }}\n{% endfor %}
 
         """
@@ -144,15 +144,16 @@ runs:
       run: |
         echo "==> Preparing to push Major.Minor.Patch version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
 
+        echo "Generating changelog with git-cliff..."
+        git cliff --config cliff.toml -l --prepend CHANGELOG.md
+        sed -i "s/CHANGEME/${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}/" CHANGELOG.md
+
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
           echo "Updating Terraform files with new major.minor.patch version..."
           sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" 01-locals.tf
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" README.md
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" .terraform-docs.yml
         fi
-
-        echo "Generating changelog with git-cliff..."
-        git cliff --config cliff.toml -l --prepend CHANGELOG.md
 
         echo "Staging and committing changes (if any)..."
         git add 01-locals.tf README.md .terraform-docs.yml CHANGELOG.md || true
