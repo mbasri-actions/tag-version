@@ -17,11 +17,6 @@ inputs:
     required: false
     default: 'false'
 
-  isndj:
-    description: 'Whether the repository is a Terraform module'
-    required: false
-    default: 'false'
-
   pushMajorVersionTag:
     description: 'Whether to push a Major version tag to the repository'
     required: false
@@ -128,17 +123,12 @@ runs:
         git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
 
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
-          echo ztototo
-        fi
-
-        if [ "${{ inputs.isndj }}" = "true" ]; then
-          echo ztototo
+          sed "s/\("technical:module:version"\).*/\1: \"v${{ steps.gitversion.outputs.major }}\"/" 01-locals.tf
+          sed "s/\(terraform-aws-.*?ref=\).*/\1${{ steps.gitversion.outputs.major }}\"/" README.md
         fi
 
         git tag "v${{ steps.gitversion.outputs.major }}"
         git push origin "v${{ steps.gitversion.outputs.major }}"
-
-
 
     - name: Push Major.Minor Version Tag
       if: ${{ inputs.pushMajorMinorVersionTag == 'true' }}
