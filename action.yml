@@ -118,7 +118,7 @@ runs:
       shell: bash
       run: |
         git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git config user.email "mbasri.dev@outlook.com"
 
         git tag -d "v${{ steps.gitversion.outputs.major }}" || true
         git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
@@ -131,7 +131,7 @@ runs:
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" .terraform-docs.yml
         fi
 
-        git add .
+        git add 01-locals.tf README.md .terraform-docs.yml || true
         git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}" || echo "No changes to commit"
 
         git tag "v${{ steps.gitversion.outputs.major }}"
@@ -145,6 +145,18 @@ runs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git tag -d "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}" || true
         git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}" || true
+        
+        git checkout -b tmp-release-major-minor
+
+        if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
+          sed -i "s/\("technical:module:version"\).*/\1: \"${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}\"/" 01-locals.tf
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}\"/" README.md
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}\"/" .terraform-docs.yml
+        fi
+
+        git add 01-locals.tf README.md .terraform-docs.yml || true
+        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}" || echo "No changes to commit"
+
         git tag "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
         git push origin "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
     
@@ -154,6 +166,18 @@ runs:
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        git checkout -b tmp-release-major-minor-patch
+
+        if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
+          sed -i "s/\("technical:module:version"\).*/\1: \"${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" 01-locals.tf
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" README.md
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" .terraform-docs.yml
+        fi
+
+        git add 01-locals.tf README.md .terraform-docs.yml || true
+        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}" || echo "No changes to commit"
+
         git tag "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
         git push origin "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
 
