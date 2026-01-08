@@ -106,14 +106,19 @@ runs:
       with:
         configFilePath: ${{ inputs.configFilePath }}
 
+    - name: Configure Git
+      shell: bash
+      run: |
+        echo "==> Configuring Git user..."
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
     - name: Push Major Version Tag
       if: ${{ inputs.pushMajorVersionTag == 'true' }}
       shell: bash
       run: |
         echo "==> Preparing to push Major version tag: v${{ steps.gitversion.outputs.major }}"
-        git config user.name "github-actions[bot]"
-        git config user.email "mbasri.dev@outlook.com"
-
+        
         echo "Deleting local and remote tag if exists..."
         git tag -d "v${{ steps.gitversion.outputs.major }}" || true
         git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
@@ -141,8 +146,6 @@ runs:
       shell: bash
       run: |
         echo "==> Preparing to push Major.Minor version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
 
         echo "Deleting local and remote tag if exists..."
         git tag -d "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}" || true
@@ -171,8 +174,6 @@ runs:
       shell: bash
       run: |
         echo "==> Preparing to push Major.Minor.Patch version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
 
         echo "Creating temporary branch for release..."
         git checkout -b tmp-release-major-minor-patch
