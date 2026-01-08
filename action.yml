@@ -2,15 +2,25 @@ name: 'GitVersion Action'
 description: 'This GitHub Action extracts version information using GitVersion.'
 
 inputs:
-  useDefaultConfig:
+  useGitVersionDefaultConfig:
     description: 'Whether to use the default GitVersion configuration'
     required: false
     default: 'true'
 
-  configFilePath:
+  gitVersionConfigFilePath:
     description: 'Path to a custom GitVersion configuration file'
     required: false
     default: 'gitversion.yml'
+  
+  useCliffDefaultConfig:
+    description: 'Whether to use the default git-cliff configuration'
+    required: false
+    default: 'true'
+
+  cliffConfigFilePath:
+    description: 'Path to a custom git-cliff configuration file'
+    required: false
+    default: 'cliff.toml'
 
   isTerraformModule:
     description: 'Whether the repository is a Terraform module'
@@ -52,7 +62,7 @@ runs:
       continue-on-error: false
 
     - name: Create default GitVersion config
-      if: ${{ inputs.useDefaultConfig == 'true' }}
+      if: ${{ inputs.useGitVersionDefaultConfig == 'true' }}
       shell: bash
       run: |
         echo "==> Creating default GitVersion configuration file (gitversion.yml)..."
@@ -92,7 +102,7 @@ runs:
         echo "Default gitversion.yml created."
 
     - name: Create default cliff.toml config
-      if: ${{ inputs.useDefaultConfig == 'true' }}
+      if: ${{ inputs.useCliffDefaultConfig == 'true' }}
       shell: bash
       run: |
         echo "==> Creating default Cliff configuration file (cliff.toml)..."
@@ -131,7 +141,7 @@ runs:
       id: gitversion
       uses: gittools/actions/gitversion/execute@v4
       with:
-        configFilePath: ${{ inputs.configFilePath }}
+        configFilePath: ${{ inputs.gitVersionConfigFilePath }}
 
     - name: Configure Git
       shell: bash
@@ -146,7 +156,7 @@ runs:
         echo "==> Preparing to push Major.Minor.Patch version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
 
         echo "Generating changelog with git-cliff..."
-        git cliff --config cliff.toml -l --prepend CHANGELOG.md
+        git cliff --config ${{ inputs.cliffConfigFilePath }} -l --prepend CHANGELOG.md
         sed -i "s/CHANGEME/${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}/g" CHANGELOG.md
 
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
