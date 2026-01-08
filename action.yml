@@ -83,12 +83,12 @@ runs:
             is-main-branch: true
           release:
             mode: ContinuousDeployment
-            increment: None
+            increment: Minor
             regex: ^release/(?<BranchName>[0-9]+\.[0-9]+\.[0-9]+)$
             is-release-branch: true
           develop:
             mode: ContinuousDelivery
-            increment: Minor
+            increment: Patch
             regex: ^dev(elop)?(ment)?$
         commit-date-format: ddMMyyyy
         assembly-versioning-scheme: MajorMinorPatch
