@@ -17,6 +17,11 @@ inputs:
     required: false
     default: 'false'
 
+  isndj:
+    description: 'Whether the repository is a Terraform module'
+    required: false
+    default: 'false'
+
   pushMajorVersionTag:
     description: 'Whether to push a Major version tag to the repository'
     required: false
@@ -123,6 +128,10 @@ runs:
         git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
 
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
+          echo ztototo
+        fi
+
+        if [ "${{ inputs.isndj }}" = "true" ]; then
           echo ztototo
         fi
 
