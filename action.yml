@@ -208,6 +208,7 @@ runs:
     - name: Push changes in current branch
       shell: bash
       run: |
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
         echo "Pushing changes to origin branch $CURRENT_BRANCH..."
         git push origin "$CURRENT_BRANCH"
 
