@@ -43,13 +43,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Step
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
+        fetch-tags: true
     
     - name: Generate semantic version and tag repository
       id: gitversion
       uses: mbasri-actions/gitversion@v1.0.0
+      with:  
+        isTerraformModule: 'true'
 ```
 
 ## Author

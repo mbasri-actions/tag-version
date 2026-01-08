@@ -220,15 +220,3 @@ runs:
         git push origin "v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}"
 
         git push origin $(git rev-parse --abbrev-ref HEAD)
-
-    
-
-    - name: Set outputs
-      shell: bash
-      run: |
-        echo "==> Setting outputs for next steps..."
-        echo "MAJOR_VERSION=${{ env.MAJOR_VERSION }}" >> $GITHUB_OUTPUT
-        echo "MINOR_VERSION=${{ env.MINOR_VERSION }}" >> $GITHUB_OUTPUT
-        echo "PATCH_VERSION=${{ env.PATCH_VERSION }}" >> $GITHUB_OUTPUT
-        echo "MAJOR_MINOR_VERSION=${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}" >> $GITHUB_OUTPUT
-        echo "MAJOR_MINOR_PATCH_VERSION=${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}" >> $GITHUB_OUTPUT
