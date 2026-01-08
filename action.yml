@@ -17,21 +17,6 @@ inputs:
     required: false
     default: 'false'
 
-  pushMajorVersionTag:
-    description: 'Whether to push a Major version tag to the repository'
-    required: false
-    default: 'false'
-
-  pushMajorMinorVersionTag:
-    description: 'Whether to push a Major.Minor version tag to the repository'
-    required: false
-    default: 'false'
-
-  pushMajorMinorPatchVersionTag:
-    description: 'Whether to push a Major.Minor.Patch version tag to the repository'
-    required: false
-    default: 'false'
-
 outputs:
   majorVersion:
     description: 'Major version number'
@@ -106,6 +91,36 @@ runs:
         EOF
         echo "Default gitversion.yml created."
 
+    - name: Create default cliff.toml config
+      if: ${{ inputs.useDefaultConfig == 'true' }}
+      shell: bash
+      run: |
+        echo "==> Creating default Cliff configuration file (cliff.toml)..."
+        cat > cliff.toml << 'EOF'
+        [changelog]
+        # Global template
+        header = """# Change Log
+
+        All notable changes to this project will be documented in this file.
+
+        """
+
+        # Template for each version
+        body = """
+        ## [{{ version }}](${{ github.repository }}/-/compare/{{ previous.version }}...{{ version }}) ({{ timestamp | date(format="%Y-%m-%d") }})
+        {% for commit in commits %}- {{ commit.message | split(pat="\n") | first | upper_first }}\n{% endfor %}
+
+        """
+
+        footer = ""
+        trim = true
+
+        EOF
+        echo "Default cliff.toml created."
+
+    - name: Set up git-cliff
+      uses: kenji-miyake/setup-git-cliff@v1
+      
     - name: Setup GitVersion
       uses: gittools/actions/gitversion/setup@v4
       with:
@@ -124,33 +139,30 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    - name: Push Major Version Tag
-      if: ${{ inputs.pushMajorVersionTag == 'true' }}
+    - name: Push Major.Minor.Patch Version Tag
       shell: bash
       run: |
-        echo "==> Preparing to push Major version tag: v${{ steps.gitversion.outputs.major }}"
-        
-        echo "Deleting local and remote tag if exists..."
-        git tag -d "v${{ steps.gitversion.outputs.major }}" || true
-        git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
+        echo "==> Preparing to push Major.Minor.Patch version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
 
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
-          echo "Updating Terraform files with new major version..."
-          sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${{ steps.gitversion.outputs.major }}\"/" 01-locals.tf
-          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" README.md
-          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" .terraform-docs.yml
+          echo "Updating Terraform files with new major.minor.patch version..."
+          sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" 01-locals.tf
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" README.md
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" .terraform-docs.yml
         fi
 
-        echo "Staging and committing changes (if any)..."
-        git add 01-locals.tf README.md .terraform-docs.yml || true
-        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}" || echo "No changes to commit."
+        echo "Generating changelog with git-cliff..."
+        git cliff --config cliff.toml -l --prepend CHANGELOG.md
 
-        echo "Tagging and pushing v${{ steps.gitversion.outputs.major }}..."
-        git tag "v${{ steps.gitversion.outputs.major }}"
-        git push origin "v${{ steps.gitversion.outputs.major }}"
+        echo "Staging and committing changes (if any)..."
+        git add 01-locals.tf README.md .terraform-docs.yml CHANGELOG.md || true
+        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}" || echo "No changes to commit."
+
+        echo "Tagging and pushing v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}..."
+        git tag "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
+        git push origin "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
 
     - name: Push Major.Minor Version Tag
-      if: ${{ inputs.pushMajorMinorVersionTag == 'true' }}
       shell: bash
       run: |
         echo "==> Preparing to push Major.Minor version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
@@ -174,26 +186,29 @@ runs:
         git tag "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
         git push origin "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
     
-    - name: Push Major.Minor.Patch Version Tag
-      if: ${{ inputs.pushMajorMinorPatchVersionTag == 'true' }}
+    - name: Push Major Version Tag
       shell: bash
       run: |
-        echo "==> Preparing to push Major.Minor.Patch version tag: v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
+        echo "==> Preparing to push Major version tag: v${{ steps.gitversion.outputs.major }}"
+        
+        echo "Deleting local and remote tag if exists..."
+        git tag -d "v${{ steps.gitversion.outputs.major }}" || true
+        git push origin ":refs/tags/v${{ steps.gitversion.outputs.major }}" || true
 
         if [ "${{ inputs.isTerraformModule }}" = "true" ]; then
-          echo "Updating Terraform files with new major.minor.patch version..."
-          sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" 01-locals.tf
-          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" README.md
-          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}\"/" .terraform-docs.yml
+          echo "Updating Terraform files with new major version..."
+          sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${{ steps.gitversion.outputs.major }}\"/" 01-locals.tf
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" README.md
+          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${{ steps.gitversion.outputs.major }}\"/" .terraform-docs.yml
         fi
 
         echo "Staging and committing changes (if any)..."
         git add 01-locals.tf README.md .terraform-docs.yml || true
-        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}" || echo "No changes to commit."
+        git commit -m "chore: bump module version to v${{ steps.gitversion.outputs.major }}" || echo "No changes to commit."
 
-        echo "Tagging and pushing v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}..."
-        git tag "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
-        git push origin "v${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
+        echo "Tagging and pushing v${{ steps.gitversion.outputs.major }}..."
+        git tag "v${{ steps.gitversion.outputs.major }}"
+        git push origin "v${{ steps.gitversion.outputs.major }}"
 
     - name: Push changes in current branch
       shell: bash
