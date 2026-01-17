@@ -120,9 +120,6 @@ runs:
         ## [CHANGEME](${{ github.server_url }}/${{ github.repository }}/compare/{{ previous.version }}...CHANGEME) ({{ now() | date(format="%Y-%m-%d") }})
 
         {% for commit in commits %}
-        # The 'pat' parameter in the 'contains' filter specifies the pattern to search for within the commit message.
-        # In this context, 'pat="bump version"' checks if the commit message contains the exact phrase "bump version".
-        # If the commit message does not contain this pattern, the condition evaluates to true.
         {% if not commit.message | contains(pat="bump version") %}
         - {{ commit.message | split(pat="\n") | first | upper_first }}
         {% endif %}
