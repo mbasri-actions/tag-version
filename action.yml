@@ -119,7 +119,14 @@ runs:
         body = """
         ## [CHANGEME](${{ github.server_url }}/${{ github.repository }}/compare/{{ previous.version }}...CHANGEME) ({{ now() | date(format="%Y-%m-%d") }})
 
-        {% for commit in commits %}- {{ commit.message | split(pat="\n") | first | upper_first }}\n{% endfor %}
+        {% for commit in commits %}
+        # The 'pat' parameter in the 'contains' filter specifies the pattern to search for within the commit message.
+        # In this context, 'pat="bump version"' checks if the commit message contains the exact phrase "bump version".
+        # If the commit message does not contain this pattern, the condition evaluates to true.
+        {% if not commit.message | contains(pat="bump version") %}
+        - {{ commit.message | split(pat="\n") | first | upper_first }}
+        {% endif %}
+        {% endfor %}
 
         """
 
@@ -170,7 +177,7 @@ runs:
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v$1\"/" .terraform-docs.yml
 
           git add 01-locals.tf README.md .terraform-docs.yml CHANGELOG.md || true
-          git commit -m "chore: bump module version to v$1" || echo "No changes to commit."
+          git commit -m "chore: bump version to v$1" || echo "No changes to commit."
           
           git tag "v$1"
           git push origin "v$1"
