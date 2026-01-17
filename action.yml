@@ -120,9 +120,9 @@ runs:
         ## [CHANGEME](${{ github.server_url }}/${{ github.repository }}/compare/{{ previous.version }}...CHANGEME) ({{ now() | date(format="%Y-%m-%d") }})
 
         {% for commit in commits %}
-        
+        {% if not commit.message | contains("bump") %}
         - {{ commit.message | split(pat="\n") | first | upper_first }}
-        
+        {% endif %}
         {% endfor %}
 
         """
