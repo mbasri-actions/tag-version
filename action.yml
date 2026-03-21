@@ -66,12 +66,18 @@ runs:
         PROMPT_TEMPLATE="${PROMPT_PATH:-${GITHUB_ACTION_PATH}/config/changelog.prompt.tpl}"
 
         export VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
-        export GIT_LOG=$(git log "${{ env.PREVIOUS_TAG }}...HEAD" --pretty=format:"%s")
+        
+        if [ -n "${{ env.PREVIOUS_TAG }}" ]; then
+          export GIT_LOG=$(git log "${{ env.PREVIOUS_TAG }}...HEAD" --pretty=format:"%s")
+          COMPARE_LINK="## [v${VERSION}](${{ env.REPO_URL }}/compare/${{ env.PREVIOUS_TAG }}...v${VERSION}) (${{ env.TODAY }})"
+        else
+          export GIT_LOG=$(git log --pretty=format:"%s")
+          COMPARE_LINK="## [v${VERSION}](${{ env.REPO_URL }}/releases/tag/v${VERSION}) (${{ env.TODAY }})"
+        fi
         export EXISTING_CHANGELOG=$(cat CHANGELOG.md 2>/dev/null || echo "")
 
         envsubst '${VERSION} ${GIT_LOG} ${EXISTING_CHANGELOG}' < "$PROMPT_TEMPLATE" > /tmp/changelog.prompt
 
-        COMPARE_LINK="## [v${{ env.MAJOR_MINOR_PATCH_VERSION }}](${{ env.REPO_URL }}/compare/${{ env.PREVIOUS_TAG }}...v${{ env.MAJOR_MINOR_PATCH_VERSION }}) (${{ env.TODAY }})"
         echo "CHANGELOG_COMPARE_LINK=${COMPARE_LINK}" >> $GITHUB_ENV
 
     - name: Generate changelog with GitHub Models AI
