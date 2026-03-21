@@ -1,5 +1,5 @@
 name: 'GitVersion Action'
-description: 'This GitHub Action extracts version information using GitVersion and optionally updates Terraform module files and generates changelogs using git-cliff.'
+description: 'This GitHub Action extracts version information using GitVersion and optionally updates Terraform module files and generates changelogs using Claude AI.'
 
 inputs:
   useGitVersionDefaultConfig:
@@ -11,21 +11,15 @@ inputs:
     description: 'Path to a custom GitVersion configuration file'
     required: false
     default: 'gitversion.yml'
-  
-  useCliffDefaultConfig:
-    description: 'Whether to use the default git-cliff configuration'
-    required: false
-    default: 'true'
-
-  cliffConfigFilePath:
-    description: 'Path to a custom git-cliff configuration file'
-    required: false
-    default: 'cliff.toml'
 
   isTerraformModule:
     description: 'Whether the repository is a Terraform module'
     required: false
     default: 'false'
+
+  anthropicApiKey:
+    description: 'Anthropic API key for Claude-based changelog generation'
+    required: true
 
 outputs:
   majorVersion:
@@ -101,41 +95,6 @@ runs:
         EOF
         echo "Default gitversion.yml created."
 
-    - name: Create default cliff.toml config
-      if: ${{ inputs.useCliffDefaultConfig == 'true' }}
-      shell: bash
-      run: |
-        echo "==> Creating default Cliff configuration file (cliff.toml)..."
-        cat > cliff.toml << 'EOF'
-        [changelog]
-        # Global template
-        header = """# Change Log
-
-        All notable changes to this project will be documented in this file.
-
-        """
-
-        # Template for each version
-        body = """
-        ## [CHANGEME](${{ github.server_url }}/${{ github.repository }}/compare/{{ previous.version }}...CHANGEME) ({{ now() | date(format="%Y-%m-%d") }})
-
-        {% for commit in commits %}{% if not commit.message is containing('bump') %}- {{ commit.message | split(pat="\n") | first | upper_first }}
-        {% endif %}{% endfor %}
-
-        """
-
-        [git]
-        tag_filter_pattern = "^v[0-9]{1,}\\.[0-9]{1,}\\.[0-9]{1,}$"
-
-        footer = ""
-        trim = true
-
-        EOF
-        echo "Default cliff.toml created."
-
-    - name: Set up git-cliff
-      uses: kenji-miyake/setup-git-cliff@v1
-      
     - name: Setup GitVersion
       uses: gittools/actions/gitversion/setup@v4
       with:
@@ -161,10 +120,58 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    - name: Push Version Tags and Update Terraform Module Files
-      if : ${{ inputs.isTerraformModule == 'true' }}
+    - name: Prepare changelog context
+      if: ${{ inputs.isTerraformModule == 'true' }}
       shell: bash
-      run: |    
+      run: |
+        VERSION="${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}"
+        REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        TODAY=$(date +%Y-%m-%d)
+
+        if [ -n "$PREVIOUS_TAG" ]; then
+          COMPARE_LINK="## [v${VERSION}](${REPO_URL}/compare/${PREVIOUS_TAG}...v${VERSION}) (${TODAY})"
+          GIT_LOG=$(git log "${PREVIOUS_TAG}...HEAD" --pretty=format:"%s")
+        else
+          COMPARE_LINK="## [v${VERSION}](${REPO_URL}/tree/v${VERSION}) (${TODAY})"
+          GIT_LOG=$(git log -10 --pretty=format:"%s")
+        fi
+
+        echo "CHANGELOG_VERSION=${VERSION}" >> $GITHUB_ENV
+        echo "CHANGELOG_COMPARE_LINK=${COMPARE_LINK}" >> $GITHUB_ENV
+        echo "CHANGELOG_GIT_LOG<<GIT_LOG_EOF" >> $GITHUB_ENV
+        echo "${GIT_LOG}" >> $GITHUB_ENV
+        echo "GIT_LOG_EOF" >> $GITHUB_ENV
+
+    - name: Generate changelog with Claude AI
+      if: ${{ inputs.isTerraformModule == 'true' }}
+      uses: anthropics/claude-code-action@v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropicApiKey }}
+        prompt: |
+          Edit the file CHANGELOG.md to add a new changelog entry for version ${{ env.CHANGELOG_VERSION }}.
+
+          Insert the new entry right after the "## [Unreleased]" line.
+
+          The new entry header must be exactly:
+          ${{ env.CHANGELOG_COMPARE_LINK }}
+
+          Commits since last release:
+          ${{ env.CHANGELOG_GIT_LOG }}
+
+          Rules:
+          - Read the existing CHANGELOG.md to match its exact format and style
+          - Use subsections "### Breaking Changes", "### Added", "### Removed", "### Fixed" only when relevant
+          - For simple releases, use plain bullet points without subsections
+          - Each bullet point starts with "- " and describes the change concisely
+          - Ignore any "chore: bump version" commits
+          - Write in English
+          - Only edit CHANGELOG.md, do not touch any other file
+
+    - name: Push version tags and update Terraform module files
+      if: ${{ inputs.isTerraformModule == 'true' }}
+      shell: bash
+      run: |
         update_version() {
           sed -i "s/\(\"technical:module:version\"\).*/\1 : \"$1\"/" 01-locals.tf
           sed -i "s/\(terraform-aws-.*?ref=\).*/\1v$1\"/" README.md
@@ -172,21 +179,17 @@ runs:
 
           git add 01-locals.tf README.md .terraform-docs.yml CHANGELOG.md || true
           git commit -m "chore: bump version to v$1" || echo "No changes to commit."
-          
+
           git tag "v$1"
           git push origin "v$1"
         }
 
-        # Delete existing tags if they exist
-        git tag -d v${{ env.MAJOR_VERSION }} v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }} || true
-        git push origin ":refs/tags/v${{ env.MAJOR_VERSION }}" ":refs/tags/v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}" || true
+        # Delete existing floating tags if they exist
+        #git tag -d v${{ env.MAJOR_VERSION }} v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }} || true
+        #git push origin ":refs/tags/v${{ env.MAJOR_VERSION }}" ":refs/tags/v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}" || true
 
-        # Generate changelog
-        git cliff --config ${{ inputs.cliffConfigFilePath }} -u --prepend CHANGELOG.md
-        sed -i "s/CHANGEME/${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}/g" CHANGELOG.md
-
-        update_version ${{ env.MAJOR_VERSION }}
-        update_version ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}
+        #update_version ${{ env.MAJOR_VERSION }}
+        #update_version ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}
         update_version ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}
 
         git push origin $(git rev-parse --abbrev-ref HEAD)
