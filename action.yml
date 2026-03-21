@@ -17,7 +17,7 @@ inputs:
     required: false
     default: ''
 
-outputs:  
+outputs:
   majorMinorPatchVersion:
     description: 'Major.Minor.Patch version'
     value: ${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}
@@ -32,7 +32,7 @@ runs:
         echo "==> Configuring Git user..."
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-      
+
     - name: Resolve GitVersion config
       id: config
       shell: bash
@@ -56,20 +56,61 @@ runs:
       run: |
         VERSION="${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
         PREV_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+        REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
         echo "MAJOR_MINOR_PATCH_VERSION=${VERSION}" >> $GITHUB_ENV
-        echo "REPO_URL=${{ github.server_url }}/${{ github.repository }}" >> $GITHUB_ENV
+        echo "REPO_URL=${REPO_URL}" >> $GITHUB_ENV
         echo "PREVIOUS_TAG=${PREV_TAG}" >> $GITHUB_ENV
         echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
 
-        echo "### Release v${VERSION}" >> $GITHUB_STEP_SUMMARY
+        # --- STEP SUMMARY: Header ---
+        echo "# :package: Release \`v${VERSION}\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| | |" >> $GITHUB_STEP_SUMMARY
+        echo "> **${{ github.repository }}** · [\`${BRANCH}\`](${REPO_URL}/tree/${BRANCH}) · $(date '+%d %B %Y %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # --- STEP SUMMARY: Version table ---
+        echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
         echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Version** | \`v${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Previous** | \`${PREV_TAG:-none}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Branch** | \`$(git rev-parse --abbrev-ref HEAD)\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Config** | \`${{ steps.config.outputs.gitVersionConfigPath }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| :label: Version | \`${PREV_TAG:-none}\` :arrow_right: **\`v${VERSION}\`** |" >> $GITHUB_STEP_SUMMARY
+        echo "| :twisted_rightwards_arrows: Branch | [\`${BRANCH}\`](${REPO_URL}/tree/${BRANCH}) |" >> $GITHUB_STEP_SUMMARY
+        echo "| :gear: GitVersion Config | \`${{ steps.config.outputs.gitVersionConfigPath }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| :building_construction: Terraform Module | \`${{ inputs.isTerraformModule }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # --- STEP SUMMARY: Commit stats ---
+        if [ -n "$PREV_TAG" ]; then
+          TOTAL_COMMITS=$(git rev-list "${PREV_TAG}...HEAD" --count --no-merges)
+          FEAT_COUNT=$(git log "${PREV_TAG}...HEAD" --pretty=format:"%s" --no-merges | grep -c '^feat' || true)
+          FIX_COUNT=$(git log "${PREV_TAG}...HEAD" --pretty=format:"%s" --no-merges | grep -c '^fix' || true)
+          OTHER_COUNT=$((TOTAL_COMMITS - FEAT_COUNT - FIX_COUNT))
+
+          echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| :bar_chart: Total commits | **${TOTAL_COMMITS}** |" >> $GITHUB_STEP_SUMMARY
+          echo "| :sparkles: Features (\`feat\`) | ${FEAT_COUNT} |" >> $GITHUB_STEP_SUMMARY
+          echo "| :bug: Fixes (\`fix\`) | ${FIX_COUNT} |" >> $GITHUB_STEP_SUMMARY
+          echo "| :wrench: Others | ${OTHER_COUNT} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "<details>" >> $GITHUB_STEP_SUMMARY
+          echo "<summary>:mag: Commits since <code>${PREV_TAG}</code></summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          git log "${PREV_TAG}...HEAD" --pretty=format:"%h %s (%an)" --no-merges >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## :clipboard: Steps" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo ":white_check_mark: **GitVersion** — \`v${VERSION}\`" >> $GITHUB_STEP_SUMMARY
 
     - name: Prepare CHANGELOG prompt
       shell: bash
@@ -78,7 +119,7 @@ runs:
         PROMPT_TEMPLATE="${PROMPT_PATH:-${GITHUB_ACTION_PATH}/config/changelog.prompt.tpl}"
 
         export VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
-        
+
         if [ -n "${{ env.PREVIOUS_TAG }}" ]; then
           export GIT_LOG=$(git log "${{ env.PREVIOUS_TAG }}...HEAD" --pretty=format:"%s")
           COMPARE_LINK="## [v${VERSION}](${{ env.REPO_URL }}/compare/${{ env.PREVIOUS_TAG }}...v${VERSION}) (${{ env.TODAY }})"
@@ -114,11 +155,7 @@ runs:
         git add CHANGELOG.md
         echo "==> Changelog updated."
 
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "### Changelog" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "${{ steps.ai-changelog.outputs.response }}" >> $GITHUB_STEP_SUMMARY
+        echo ":white_check_mark: **Changelog** — Generated by AI (\`openai/gpt-4o-mini\`)" >> $GITHUB_STEP_SUMMARY
 
     - name: Update Terraform module version files
       if: ${{ inputs.isTerraformModule == 'true' }}
@@ -131,8 +168,7 @@ runs:
         git add 01-locals.tf README.md .terraform-docs.yml
         echo "==> Terraform version files updated."
 
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| **Terraform files** | updated |" >> $GITHUB_STEP_SUMMARY
+        echo ":white_check_mark: **Terraform files** — \`01-locals.tf\` \`README.md\` \`.terraform-docs.yml\`" >> $GITHUB_STEP_SUMMARY
 
     - name: Commit, tag and push
       shell: bash
@@ -140,6 +176,7 @@ runs:
         MAJOR="${{ steps.gitversion.outputs.major }}"
         MAJOR_MINOR="${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
         MAJOR_MINOR_PATCH_VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
+        REPO_URL="${{ env.REPO_URL }}"
 
         git commit -m "chore: bump version to v${MAJOR_MINOR_PATCH_VERSION}" || echo "No changes to commit."
 
@@ -152,8 +189,50 @@ runs:
         git push origin "v${MAJOR_MINOR_PATCH_VERSION}"
         git push origin $(git rev-parse --abbrev-ref HEAD)
 
+        COMMIT_SHA=$(git rev-parse --short HEAD)
+        COMMIT_FULL=$(git rev-parse HEAD)
+
+        echo ":white_check_mark: **Commit & Push** — [\`${COMMIT_SHA}\`](${REPO_URL}/commit/${COMMIT_FULL})" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+
+        # --- STEP SUMMARY: Changelog section ---
         echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "**Tags pushed:** \`v${MAJOR}\` · \`v${MAJOR_MINOR}\` · \`v${MAJOR_MINOR_PATCH_VERSION}\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Commit:** \`$(git rev-parse --short HEAD)\`" >> $GITHUB_STEP_SUMMARY
+        echo "## :memo: Changelog" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "${{ steps.ai-changelog.outputs.response }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # --- STEP SUMMARY: Tags section ---
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## :label: Tags" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Tag | Type | Link |" >> $GITHUB_STEP_SUMMARY
+        echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+        echo "| \`v${MAJOR}\` | :fast_forward: Major | [view](${REPO_URL}/releases/tag/v${MAJOR}) |" >> $GITHUB_STEP_SUMMARY
+        echo "| \`v${MAJOR_MINOR}\` | :rewind: Minor | [view](${REPO_URL}/releases/tag/v${MAJOR_MINOR}) |" >> $GITHUB_STEP_SUMMARY
+        echo "| \`v${MAJOR_MINOR_PATCH_VERSION}\` | :pushpin: Patch | [view](${REPO_URL}/releases/tag/v${MAJOR_MINOR_PATCH_VERSION}) |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # --- STEP SUMMARY: Files changed ---
+        echo "<details>" >> $GITHUB_STEP_SUMMARY
+        echo "<summary>:open_file_folder: Files changed</summary>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo '```diff' >> $GITHUB_STEP_SUMMARY
+        git diff --name-status HEAD~1 HEAD 2>/dev/null | while IFS=$'\t' read -r status file; do
+          case "$status" in
+            A) echo "+ ${file}" >> $GITHUB_STEP_SUMMARY ;;
+            M) echo "~ ${file}" >> $GITHUB_STEP_SUMMARY ;;
+            D) echo "- ${file}" >> $GITHUB_STEP_SUMMARY ;;
+            *) echo "  ${file}" >> $GITHUB_STEP_SUMMARY ;;
+          esac
+        done || echo "N/A" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "</details>" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # --- STEP SUMMARY: Footer ---
+        echo "> [!NOTE]" >> $GITHUB_STEP_SUMMARY
+        echo "> Release **\`v${MAJOR_MINOR_PATCH_VERSION}\`** has been tagged and pushed to [\`origin/$(git rev-parse --abbrev-ref HEAD)\`](${REPO_URL}/tree/$(git rev-parse --abbrev-ref HEAD))." >> $GITHUB_STEP_SUMMARY
