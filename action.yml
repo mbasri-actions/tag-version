@@ -164,12 +164,14 @@ runs:
       with:
         model: 'openai/gpt-4o-mini'
         prompt-file: '/tmp/changelog.prompt'
-        #token: ${{ inputs.githubToken }}
 
-    - name: Write changelog entry
+    - name: Update changelog, version files and push tags
       if: ${{ inputs.isTerraformModule == 'true' }}
       shell: bash
       run: |
+        VERSION="${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}"
+
+        # Write changelog entry
         CHANGELOG_BODY="${{ steps.ai-changelog.outputs.response }}"
 
         if [ -z "$CHANGELOG_BODY" ]; then
@@ -179,7 +181,6 @@ runs:
 
         ENTRY=$(printf '%s\n\n%s' "$CHANGELOG_COMPARE_LINK" "$CHANGELOG_BODY")
 
-        # Insert after "## [Unreleased]" if present, otherwise after the header block
         if grep -q "^## \[Unreleased\]" CHANGELOG.md; then
           awk -v entry="$ENTRY" '
             /^## \[Unreleased\]/ { print; printf "\n%s\n", entry; next }
@@ -193,35 +194,18 @@ runs:
         fi
 
         mv CHANGELOG.md.tmp CHANGELOG.md
+        echo "==> Changelog updated."
 
-        echo "==> Changelog generated successfully with Claude AI."
+        # Update version in Terraform files
+        sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${VERSION}\"/" 01-locals.tf
+        sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${VERSION}\"/" README.md
+        sed -i "s/\(terraform-aws-.*?ref=\).*/\1v${VERSION}\"/" .terraform-docs.yml
 
-        git add CHANGELOG.md
-        git commit -m "docs: update CHANGELOG for v${{ env.MAJOR_MINOR_VERSION }}" || echo "No changes to commit."
-        git push origin $(git rev-parse --abbrev-ref HEAD)
+        # Single commit with all changes
+        git add CHANGELOG.md 01-locals.tf README.md .terraform-docs.yml || true
+        git commit -m "chore: bump version to v${VERSION}" || echo "No changes to commit."
 
-    - name: Push version tags and update Terraform module files
-      if: ${{ inputs.isTerraformModule == 'true' }}
-      shell: bash
-      run: |
-        update_version() {
-          sed -i "s/\(\"technical:module:version\"\).*/\1 : \"$1\"/" 01-locals.tf
-          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v$1\"/" README.md
-          sed -i "s/\(terraform-aws-.*?ref=\).*/\1v$1\"/" .terraform-docs.yml
-
-          git add 01-locals.tf README.md .terraform-docs.yml CHANGELOG.md || true
-          git commit -m "chore: bump version to v$1" || echo "No changes to commit."
-
-          git tag "v$1"
-          git push origin "v$1"
-        }
-
-        # Delete existing floating tags if they exist
-        #git tag -d v${{ env.MAJOR_VERSION }} v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }} || true
-        #git push origin ":refs/tags/v${{ env.MAJOR_VERSION }}" ":refs/tags/v${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}" || true
-
-        #update_version ${{ env.MAJOR_VERSION }}
-        #update_version ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}
-        update_version ${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}
-
+        # Tag and push
+        git tag "v${VERSION}"
+        git push origin "v${VERSION}"
         git push origin $(git rev-parse --abbrev-ref HEAD)
