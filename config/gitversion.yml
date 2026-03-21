@@ -1,4 +1,5 @@
 workflow: GitHubFlow/v1
+next-version: '1.0.0'
 tag-prefix: '[vV]'
 major-version-bump-message: '(BREAKING CHANGE|^.+!:)'
 minor-version-bump-message: '^feat(\([^)]+\))?:\s'

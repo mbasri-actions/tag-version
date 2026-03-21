@@ -106,10 +106,10 @@ runs:
       if: ${{ inputs.isTerraformModule == 'true' }}
       shell: bash
       run: |
-        VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
-        sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${VERSION}\"/" 01-locals.tf
-        sed -i "s/\(terraform-aws-[^\"]*?ref=\).*/\1v${VERSION}\"/" README.md
-        sed -i "s/\(terraform-aws-[^\"]*?ref=\).*/\1v${VERSION}\"/" .terraform-docs.yml
+        MAJOR_MINOR_PATCH_VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
+        sed -i "s/\(\"technical:module:version\"\).*/\1 : \"${MAJOR_MINOR_PATCH_VERSION}\"/" 01-locals.tf
+        sed -i "s/\(terraform-aws-[^\"]*?ref=\).*/\1v${MAJOR_MINOR_PATCH_VERSION}\"/" README.md
+        sed -i "s/\(terraform-aws-[^\"]*?ref=\).*/\1v${MAJOR_MINOR_PATCH_VERSION}\"/" .terraform-docs.yml
         git add 01-locals.tf README.md .terraform-docs.yml
         echo "==> Terraform version files updated."
 
@@ -118,15 +118,15 @@ runs:
       run: |
         MAJOR="${{ steps.gitversion.outputs.major }}"
         MAJOR_MINOR="${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}"
-        VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
+        MAJOR_MINOR_PATCH_VERSION="${{ env.MAJOR_MINOR_PATCH_VERSION }}"
 
-        git commit -m "chore: bump version to v${VERSION}" || echo "No changes to commit."
+        git commit -m "chore: bump version to v${MAJOR_MINOR_PATCH_VERSION}" || echo "No changes to commit."
 
         git tag -f "v${MAJOR}"
         git tag -f "v${MAJOR_MINOR}"
-        git tag "v${VERSION}"
+        git tag "v${MAJOR_MINOR_PATCH_VERSION}"
 
         git push origin -f "v${MAJOR}"
         git push origin -f "v${MAJOR_MINOR}"
-        git push origin "v${VERSION}"
+        git push origin "v${MAJOR_MINOR_PATCH_VERSION}"
         git push origin $(git rev-parse --abbrev-ref HEAD)
