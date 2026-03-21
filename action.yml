@@ -120,9 +120,11 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    - name: Prepare changelog context
+    - name: Generate changelog with Claude AI
       if: ${{ inputs.isTerraformModule == 'true' }}
       shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropicApiKey }}
       run: |
         VERSION="${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}"
         REPO_URL="${{ github.server_url }}/${{ github.repository }}"
@@ -137,36 +139,62 @@ runs:
           GIT_LOG=$(git log -10 --pretty=format:"%s")
         fi
 
-        echo "CHANGELOG_VERSION=${VERSION}" >> $GITHUB_ENV
-        echo "CHANGELOG_COMPARE_LINK=${COMPARE_LINK}" >> $GITHUB_ENV
-        echo "CHANGELOG_GIT_LOG<<GIT_LOG_EOF" >> $GITHUB_ENV
-        echo "${GIT_LOG}" >> $GITHUB_ENV
-        echo "GIT_LOG_EOF" >> $GITHUB_ENV
+        EXISTING_CHANGELOG=$(cat CHANGELOG.md 2>/dev/null || echo "")
 
-    - name: Generate changelog with Claude AI
-      if: ${{ inputs.isTerraformModule == 'true' }}
-      uses: anthropics/claude-code-action@v1
-      with:
-        anthropic_api_key: ${{ inputs.anthropicApiKey }}
-        prompt: |
-          Edit the file CHANGELOG.md to add a new changelog entry for version ${{ env.CHANGELOG_VERSION }}.
+        PROMPT="Generate a changelog entry for version v${VERSION}.
 
-          Insert the new entry right after the "## [Unreleased]" line.
+        Commits since last release:
+        ${GIT_LOG}
 
-          The new entry header must be exactly:
-          ${{ env.CHANGELOG_COMPARE_LINK }}
+        Existing CHANGELOG.md for format reference:
+        ${EXISTING_CHANGELOG}
 
-          Commits since last release:
-          ${{ env.CHANGELOG_GIT_LOG }}
+        Rules:
+        - Output ONLY the changelog entry body (bullet points and optional subsections), nothing else
+        - Use subsections \"### Breaking Changes\", \"### Added\", \"### Removed\", \"### Fixed\" only when relevant
+        - For simple releases, use plain bullet points without subsections
+        - Each bullet point starts with \"- \" and describes the change concisely
+        - Do not include the version header line
+        - Do not include any markdown fences or explanation
+        - Ignore \"chore: bump version\" commits
+        - Write in English"
 
-          Rules:
-          - Read the existing CHANGELOG.md to match its exact format and style
-          - Use subsections "### Breaking Changes", "### Added", "### Removed", "### Fixed" only when relevant
-          - For simple releases, use plain bullet points without subsections
-          - Each bullet point starts with "- " and describes the change concisely
-          - Ignore any "chore: bump version" commits
-          - Write in English
-          - Only edit CHANGELOG.md, do not touch any other file
+        PAYLOAD=$(jq -n --arg prompt "$PROMPT" '{
+          "model": "claude-sonnet-4-20250514",
+          "max_tokens": 1024,
+          "messages": [{"role": "user", "content": $prompt}]
+        }')
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          --max-time 30 \
+          -H "Content-Type: application/json" \
+          -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+          -H "anthropic-version: 2023-06-01" \
+          -d "$PAYLOAD" \
+          "https://api.anthropic.com/v1/messages")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "::error::Claude API returned HTTP ${HTTP_CODE}: ${BODY}"
+          exit 1
+        fi
+
+        CHANGELOG_BODY=$(echo "$BODY" | jq -r '.content[0].text // empty')
+        if [ -z "$CHANGELOG_BODY" ]; then
+          echo "::error::Claude API returned empty content."
+          exit 1
+        fi
+
+        ENTRY=$(printf '%s\n\n%s' "$COMPARE_LINK" "$CHANGELOG_BODY")
+
+        awk -v entry="$ENTRY" '
+          /^## \[Unreleased\]/ { print; printf "\n%s\n", entry; next }
+          { print }
+        ' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+
+        echo "==> Changelog generated successfully with Claude AI."
 
     - name: Push version tags and update Terraform module files
       if: ${{ inputs.isTerraformModule == 'true' }}
