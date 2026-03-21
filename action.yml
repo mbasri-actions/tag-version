@@ -192,6 +192,10 @@ runs:
 
         echo "==> Changelog generated successfully with Claude AI."
 
+        git add CHANGELOG.md
+        git commit -m "docs: update CHANGELOG for v${{ env.MAJOR_MINOR_VERSION }}" || echo "No changes to commit."
+        git push origin $(git rev-parse --abbrev-ref HEAD)
+
     - name: Push version tags and update Terraform module files
       if: ${{ inputs.isTerraformModule == 'true' }}
       shell: bash
