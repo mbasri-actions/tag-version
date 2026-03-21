@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.5](https://github.com/mbasri-actions/gitversion/compare/v1.1.4...v1.1.5) (2026-03-21)
+
+- Expanded release job summary in CI workflows to include detailed metrics and commit logs
+
 ## [v1.1.4](https://github.com/mbasri-actions/gitversion/compare/v1.1.3...v1.1.4) (2026-03-21)
 
 - Added job summaries to display release details in CI workflows
