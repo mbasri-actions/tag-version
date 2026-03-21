@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.4](https://github.com/mbasri-actions/gitversion/compare/v1.1.3...v1.1.4) (2026-03-21)
+
+- Added job summaries to display release details in CI workflows
+
 ## [v1.1.3](https://github.com/mbasri-actions/gitversion/compare/v1.1.2...v1.1.3) (2026-03-21)
 
 - Improved CI workflow by using version sorting to identify previous tags
