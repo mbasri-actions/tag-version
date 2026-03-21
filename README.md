@@ -6,7 +6,10 @@ This GitHub Action automates the process of determining and tagging the semantic
 
 - Calculates semantic version based on your Git history and branching strategy
 - Outputs version information for use in subsequent workflow steps
-- Supports custom configuration via `gitversion.yml`
+- Includes a default GitVersion config (GitHubFlow + Conventional Commits)
+- Supports custom configuration via `gitversion-config` input
+- Optionally generates AI-powered changelogs via GitHub Models API
+- Optionally updates Terraform module version files
 - Works with any GitHub workflow
 
 ## Requirements
@@ -17,12 +20,20 @@ This GitHub Action automates the process of determining and tagging the semantic
 
 | Name | Description | Required | Default |
 | --- | --- | --- | --- |
-| <a name="input_useDefaultConfig"></a> [useDefaultConfig](#input_useDefaultConfig) | Whether to use the default GitVersion configuration | false | `true` |
-| <a name="input_configFilePath"></a> [configFilePath](#input_configFilePath) | Path to a custom GitVersion configuration file | false | `gitversion.yml` |
+| <a name="input_gitversion-config"></a> [gitversion-config](#input_gitversion-config) | Path to a custom `gitversion.yml`. If empty, uses the default config bundled with this action. | false | `''` |
+| <a name="input_useChangeLogPromptDefaultConfig"></a> [useChangeLogPromptDefaultConfig](#input_useChangeLogPromptDefaultConfig) | Whether to use the default CHANGELOG prompt configuration | false | `'true'` |
+| <a name="input_isTerraformModule"></a> [isTerraformModule](#input_isTerraformModule) | Whether the repository is a Terraform module | false | `'false'` |
+| <a name="input_githubToken"></a> [githubToken](#input_githubToken) | GitHub PAT with `models:read` permission for AI changelog generation | false | `${{ github.token }}` |
 
 ## Outputs
 
-`No Outputs`
+| Name | Description |
+| --- | --- |
+| `majorVersion` | Major version number |
+| `minorVersion` | Minor version number |
+| `patchVersion` | Patch version number |
+| `majorMinorVersion` | Major.Minor version |
+| `majorMinorPatchVersion` | Major.Minor.Patch version |
 
 ## Usage
 
@@ -34,9 +45,11 @@ name: Tag Version
 on:
   push:
     branches: [ main, dev ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
+  models: read
 
 jobs:
   build:
@@ -50,9 +63,10 @@ jobs:
     
     - name: Generate semantic version and tag repository
       id: gitversion
-      uses: mbasri-actions/gitversion@v1.0.0
-      with:  
+      uses: mbasri-actions/gitversion@main
+      with:
         isTerraformModule: 'true'
+        githubToken: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ## Author

@@ -2,15 +2,15 @@ name: 'GitVersion Action'
 description: 'This GitHub Action extracts version information using GitVersion and optionally updates Terraform module files and generates changelogs using GitHub Models AI.'
 
 inputs:
-  useGitVersionDefaultConfig:
-    description: 'Whether to use the default GitVersion configuration'
+  gitVersionConfigPath:
+    description: 'Path to a custom gitversion.yml. If empty, uses the default config bundled with this action.'
+    required: false
+    default: ''
+
+  useChangeLogPromptDefaultConfig:
+    description: 'Whether to use the default CHANGELOG prompt configuration'
     required: false
     default: 'true'
-
-  gitVersionConfigFilePath:
-    description: 'Path to a custom GitVersion configuration file'
-    required: false
-    default: 'gitversion.yml'
 
   isTerraformModule:
     description: 'Whether the repository is a Terraform module'
@@ -56,45 +56,23 @@ runs:
     #   run: terraform fmt -check
     #   continue-on-error: false
 
-    - name: Create default GitVersion config
-      if: ${{ inputs.useGitVersionDefaultConfig == 'true' }}
+    - name: Configure Git
       shell: bash
       run: |
-        echo "==> Creating default GitVersion configuration file (gitversion.yml)..."
-        cat > gitversion.yml << 'EOF'
-        workflow: GitHubFlow/v1
-        tag-prefix: '[vV]'
-        major-version-bump-message: '(BREAKING CHANGE|^.+!:)'
-        minor-version-bump-message: '^feat(\([^)]+\))?:\s'
-        patch-version-bump-message: '^(fix|perf|refactor|revert|chore|docs|style|test|ci)(\([^)]+\))?:\s'
-        #patch-version-bump-message: '^(fix|perf|refactor|revert)(\([^)]+\))?:\s'
-        #no-bump-message: '^(chore|docs|style|test|ci)(\([^)]+\))?:\s'
-        commit-message-incrementing: Enabled
-        strategies:
-          - MergeMessage
-          - TaggedCommit
-          - TrackReleaseBranches
-          - VersionInBranchName
-        branches:
-          main:
-            mode: ContinuousDeployment
-            increment: Patch
-            regex: ^master$|^main$
-            is-main-branch: true
-          release:
-            mode: ContinuousDeployment
-            increment: Minor
-            regex: ^release/(?<BranchName>[0-9]+\.[0-9]+\.[0-9]+)$
-            is-release-branch: true
-          develop:
-            mode: ContinuousDelivery
-            increment: Patch
-            regex: ^dev(elop)?(ment)?$
-        commit-date-format: ddMMyyyy
-        assembly-versioning-scheme: MajorMinorPatch
-        assembly-informational-format: '{SemVer}'
-        EOF
-        echo "Default gitversion.yml created."
+        echo "==> Configuring Git user..."
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+    - name: Resolve GitVersion config
+      id: config
+      shell: bash
+      run: |
+        if [ -n "$CUSTOM_CONFIG" ] && [ -f "$CUSTOM_CONFIG" ]; then
+          echo "config-path=${{ inputs.gitVersionConfigPath }}" >> $GITHUB_OUTPUT
+        else
+          cp "${GITHUB_ACTION_PATH}/config/gitversion.yml" "${GITHUB_WORKSPACE}/gitversion.yml"
+          echo "config-path=${GITHUB_WORKSPACE}/gitversion.yml" >> $GITHUB_OUTPUT
+        fi
 
     - name: Setup GitVersion
       uses: gittools/actions/gitversion/setup@v4
@@ -105,7 +83,7 @@ runs:
       id: gitversion
       uses: gittools/actions/gitversion/execute@v4
       with:
-        configFilePath: ${{ inputs.gitVersionConfigFilePath }}
+        configFilePath: ${{ steps.config.outputs.config-path }}
 
     - name: Export version variables
       shell: bash
@@ -119,16 +97,24 @@ runs:
         echo "PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo \"\")" >> $GITHUB_ENV
         echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
 
-
-    - name: Configure Git
+    - name: Version summary
       shell: bash
       run: |
-        echo "==> Configuring Git user..."
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
+        VERSION="${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}"
+        CONFIG_PATH="${{ steps.config.outputs.config-path }}"
+        echo "==> Calculated version: v${VERSION}"
+        echo "==> GitVersion config used: ${CONFIG_PATH}"
+        echo "### GitVersion Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Version** | \`v${VERSION}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Major** | \`${{ steps.gitversion.outputs.major }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Minor** | \`${{ steps.gitversion.outputs.minor }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Patch** | \`${{ steps.gitversion.outputs.patch }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Config** | \`${CONFIG_PATH}\` |" >> $GITHUB_STEP_SUMMARY
 
-    - name: Prepare changelog prompt
-      if: ${{ inputs.isTerraformModule == 'true' }}
+    - name: Prepare CHANGELOG prompt
+      if: ${{ inputs.useChangeLogPromptDefaultConfig == 'true' && inputs.isTerraformModule == 'true' }}
       shell: bash
       run: |
         COMPARE_LINK="## [v${{ env.MAJOR_MINOR_PATCH_VERSION }}](${{ env.REPO_URL }}/compare/${{ env.PREVIOUS_TAG }}...v${{ env.MAJOR_MINOR_PATCH_VERSION }}) (${{ env.TODAY }})"
@@ -137,8 +123,8 @@ runs:
 
         echo "CHANGELOG_COMPARE_LINK=${COMPARE_LINK}" >> $GITHUB_ENV
 
-        cat > /tmp/changelog.prompt << PROMPT_EOF
-        Generate a changelog entry for version v${{ env.MAJOR_MINOR_PATCH_VERSION }}.
+        cat > /tmp/changelog.prompt <<PROMPT_EOF
+        Generate a changelog entry for version v${{ env.MAJOR_MINOR_PATCH_VERSION }} following Keep a Changelog v1.1.0 format.
 
         Commits since last release:
         ${GIT_LOG}
@@ -146,21 +132,51 @@ runs:
         Existing CHANGELOG.md for format reference:
         ${EXISTING_CHANGELOG}
 
-        Rules:
-        - Output ONLY the changelog entry body (bullet points and optional subsections), nothing else
-        - Use subsections "### Breaking Changes", "### Added", "### Removed", "### Fixed" only when relevant
-        - For simple releases, use plain bullet points without subsections
-        - Each bullet point starts with "- " and describes the change concisely
-        - Do not include the version header line
-        - Do not include any markdown fences or explanation
-        - Ignore "chore: bump version" commits
-        - Write in English
+        ## Instructions:
+        1. **Output Format**: Generate ONLY the changelog entry body with sections for this release
+        2. **Sections** (use only if relevant):
+          - ### Security (security fixes and vulnerability patches)
+          - ### Deprecated (deprecated features)
+          - ### Removed (removed functionality)
+          - ### Added (new features and capabilities)
+          - ### Changed (changes in existing functionality)
+          - ### Fixed (bug fixes)
+
+        3. **Writing Style**:
+          - Start each item with "- " (markdown bullet point)
+          - Use active voice and past tense ("Added support for..." not "Support was added...")
+          - Be concise but descriptive (one line per item, max 80 chars)
+          - Reference GitHub issues when relevant: "Fixed bug in parser (#123)"
+
+        4. **Commit Filtering**:
+          - Ignore "chore: bump version", "chore: release", "docs: update" (unless significant)
+          - Group related commits under one bullet point
+          - Convert Conventional Commits to readable sentences:
+            * "feat: X" -> "Added X"
+            * "fix: X" -> "Fixed X"
+            * "docs: X" -> "Improved documentation for X"
+            * "refactor: X" -> "Refactored X for better maintainability"
+
+        5. **Do NOT include**:
+          - Version header (no "## [v1.0.0]")
+          - Markdown fences or code blocks
+          - Any explanation or introduction text
+          - Internal implementation details
+
+        ## Example Output:
+        - Added support for TypeScript configuration files
+        - Fixed memory leak in event listener cleanup (#456)
+        - Deprecated oldFunction() in favor of newFunction()
+        - Improved error messages for better debugging
+
+        Generate the changelog entry now:
         PROMPT_EOF
 
     - name: Generate changelog with GitHub Models AI
       if: ${{ inputs.isTerraformModule == 'true' }}
       id: ai-changelog
       uses: actions/ai-inference@v1
+      continue-on-error: false
       with:
         model: 'openai/gpt-4o-mini'
         prompt-file: '/tmp/changelog.prompt'
@@ -171,27 +187,12 @@ runs:
       run: |
         VERSION="${{ env.MAJOR_VERSION }}.${{ env.MINOR_VERSION }}.${{ env.PATCH_VERSION }}"
 
-        # Write changelog entry
-        CHANGELOG_BODY="${{ steps.ai-changelog.outputs.response }}"
+        ENTRY=$(printf '%s\n\n%s' "$CHANGELOG_COMPARE_LINK" "${{ steps.ai-changelog.outputs.response }}")
 
-        if [ -z "$CHANGELOG_BODY" ]; then
-          echo "::error::GitHub Models AI returned empty content."
-          exit 1
-        fi
-
-        ENTRY=$(printf '%s\n\n%s' "$CHANGELOG_COMPARE_LINK" "$CHANGELOG_BODY")
-
-        if grep -q "^## \[Unreleased\]" CHANGELOG.md; then
-          awk -v entry="$ENTRY" '
-            /^## \[Unreleased\]/ { print; printf "\n%s\n", entry; next }
-            { print }
-          ' CHANGELOG.md > CHANGELOG.md.tmp
-        else
-          awk -v entry="$ENTRY" '
-            /^All notable changes/ { print; printf "\n%s\n", entry; next }
-            { print }
-          ' CHANGELOG.md > CHANGELOG.md.tmp
-        fi
+        awk -v entry="$ENTRY" '
+          /^All notable changes/ { print; printf "\n%s\n", entry; next }
+          { print }
+        ' CHANGELOG.md > CHANGELOG.md.tmp
 
         mv CHANGELOG.md.tmp CHANGELOG.md
         echo "==> Changelog updated."
