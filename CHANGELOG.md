@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.3](https://github.com/mbasri-actions/gitversion/compare/v1.1.2...v1.1.3) (2026-03-21)
+
+- Improved CI workflow by using version sorting to identify previous tags
+
 ## [v1.1.2](https://github.com/mbasri-actions/gitversion/compare/v1...v1.1.2) (2026-03-21)
 
 - Updated AI inference action for improved performance in CI workflow
