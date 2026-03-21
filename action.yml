@@ -17,9 +17,6 @@ inputs:
     required: false
     default: 'false'
 
-  githubToken:
-    description: 'GitHub token for GitHub Models API access (requires models:read permission)'
-    required: true
 
 outputs:
   majorVersion:
@@ -113,6 +110,7 @@ runs:
         echo "MINOR_VERSION=${{ steps.gitversion.outputs.minor }}" >> $GITHUB_ENV
         echo "PATCH_VERSION=${{ steps.gitversion.outputs.patch }}" >> $GITHUB_ENV
         echo "MAJOR_MINOR_VERSION=${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}" >> $GITHUB_ENV
+        echo "MAJOR_MINOR_PATCH_VERSION=${{ steps.gitversion.outputs.major }}.${{ steps.gitversion.outputs.minor }}.${{ steps.gitversion.outputs.patch }}" >> $GITHUB_ENV
         echo "REPO_URL=${{ github.server_url }}/${{ github.repository }}" >> $GITHUB_ENV
         echo "PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo \"\")" >> $GITHUB_ENV
         echo "TODAY=$(date +%Y-%m-%d)" >> $GITHUB_ENV
@@ -162,7 +160,6 @@ runs:
       with:
         model: 'openai/gpt-4o-mini'
         prompt-file: '/tmp/changelog.prompt'
-        token: ${{ inputs.githubToken }}
 
     - name: Write changelog entry
       if: ${{ inputs.isTerraformModule == 'true' }}
