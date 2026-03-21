@@ -1,5 +1,5 @@
 name: 'GitVersion Action'
-description: 'This GitHub Action extracts version information using GitVersion and optionally updates Terraform module files and generates changelogs using Claude AI.'
+description: 'This GitHub Action extracts version information using GitVersion and optionally updates Terraform module files and generates changelogs using GitHub Models AI.'
 
 inputs:
   useGitVersionDefaultConfig:
@@ -17,8 +17,8 @@ inputs:
     required: false
     default: 'false'
 
-  anthropicApiKey:
-    description: 'Anthropic API key for Claude-based changelog generation'
+  githubToken:
+    description: 'GitHub token for GitHub Models API access (requires models:read permission)'
     required: true
 
 outputs:
@@ -125,19 +125,18 @@ runs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-    - name: Generate changelog with Claude AI
+    - name: Prepare changelog prompt
       if: ${{ inputs.isTerraformModule == 'true' }}
       shell: bash
-      env:
-        ANTHROPIC_API_KEY: ${{ inputs.anthropicApiKey }}
       run: |
-        
-        COMPARE_LINK="## [v${{ env.MAJOR_MINOR_VERSION }}](${{ env.REPO_URL }}/compare/${{ env.PREVIOUS_TAG }}...v${{ env.MAJOR_MINOR_VERSION }}) (${{ env.TODAY }})"
+        COMPARE_LINK="## [v${{ env.MAJOR_MINOR_PATCH_VERSION }}](${{ env.REPO_URL }}/compare/${{ env.PREVIOUS_TAG }}...v${{ env.MAJOR_MINOR_PATCH_VERSION }}) (${{ env.TODAY }})"
         GIT_LOG=$(git log "${{ env.PREVIOUS_TAG }}...HEAD" --pretty=format:"%s")
-
         EXISTING_CHANGELOG=$(cat CHANGELOG.md 2>/dev/null || echo "")
 
-        PROMPT="Generate a changelog entry for version v${{ env.MAJOR_MINOR_VERSION }}.
+        echo "CHANGELOG_COMPARE_LINK=${COMPARE_LINK}" >> $GITHUB_ENV
+
+        cat > /tmp/changelog.prompt << PROMPT_EOF
+        Generate a changelog entry for version v${{ env.MAJOR_MINOR_PATCH_VERSION }}.
 
         Commits since last release:
         ${GIT_LOG}
@@ -147,43 +146,36 @@ runs:
 
         Rules:
         - Output ONLY the changelog entry body (bullet points and optional subsections), nothing else
-        - Use subsections \"### Breaking Changes\", \"### Added\", \"### Removed\", \"### Fixed\" only when relevant
+        - Use subsections "### Breaking Changes", "### Added", "### Removed", "### Fixed" only when relevant
         - For simple releases, use plain bullet points without subsections
-        - Each bullet point starts with \"- \" and describes the change concisely
+        - Each bullet point starts with "- " and describes the change concisely
         - Do not include the version header line
         - Do not include any markdown fences or explanation
-        - Ignore \"chore: bump version\" commits
-        - Write in English"
+        - Ignore "chore: bump version" commits
+        - Write in English
+        PROMPT_EOF
 
-        PAYLOAD=$(jq -n --arg prompt "$PROMPT" '{
-          "model": "claude-sonnet-4-6",
-          "max_tokens": 1024,
-          "messages": [{"role": "user", "content": $prompt}]
-        }')
+    - name: Generate changelog with GitHub Models AI
+      if: ${{ inputs.isTerraformModule == 'true' }}
+      id: ai-changelog
+      uses: actions/ai-inference@v1
+      with:
+        model: 'openai/gpt-4o-mini'
+        prompt-file: '/tmp/changelog.prompt'
+        token: ${{ inputs.githubToken }}
 
-        RESPONSE=$(curl -s -w "\n%{http_code}" \
-          --max-time 30 \
-          -H "Content-Type: application/json" \
-          -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-          -H "anthropic-version: 2023-06-01" \
-          -d "$PAYLOAD" \
-          "https://api.anthropic.com/v1/messages")
+    - name: Write changelog entry
+      if: ${{ inputs.isTerraformModule == 'true' }}
+      shell: bash
+      run: |
+        CHANGELOG_BODY="${{ steps.ai-changelog.outputs.response }}"
 
-        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-        BODY=$(echo "$RESPONSE" | sed '$d')
-
-        if [ "$HTTP_CODE" != "200" ]; then
-          echo "::error::Claude API returned HTTP ${HTTP_CODE}: ${BODY}"
-          exit 1
-        fi
-
-        CHANGELOG_BODY=$(echo "$BODY" | jq -r '.content[0].text // empty')
         if [ -z "$CHANGELOG_BODY" ]; then
-          echo "::error::Claude API returned empty content."
+          echo "::error::GitHub Models AI returned empty content."
           exit 1
         fi
 
-        ENTRY=$(printf '%s\n\n%s' "$COMPARE_LINK" "$CHANGELOG_BODY")
+        ENTRY=$(printf '%s\n\n%s' "$CHANGELOG_COMPARE_LINK" "$CHANGELOG_BODY")
 
         # Insert after "## [Unreleased]" if present, otherwise after the header block
         if grep -q "^## \[Unreleased\]" CHANGELOG.md; then
