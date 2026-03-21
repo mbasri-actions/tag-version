@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.2](https://github.com/mbasri-actions/gitversion/compare/v1...v1.1.2) (2026-03-21)
+
+- Updated AI inference action for improved performance in CI workflow
+- Removed Node.js 24 override to ensure compatibility with future versions
+
 ## [v1.1.1](https://github.com/mbasri-actions/gitversion/compare/v1...v1.1.1) (2026-03-21)
 
 - Changed JavaScript actions to consistently use Node.js version 24 in CI workflow
