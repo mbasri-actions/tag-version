@@ -17,6 +17,10 @@ inputs:
     required: false
     default: 'false'
 
+  githubToken:
+    description: 'GitHub PAT with models:read permission for AI changelog generation'
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   majorVersion:
@@ -160,6 +164,7 @@ runs:
       with:
         model: 'openai/gpt-4o-mini'
         prompt-file: '/tmp/changelog.prompt'
+        token: ${{ inputs.githubToken }}
 
     - name: Write changelog entry
       if: ${{ inputs.isTerraformModule == 'true' }}
